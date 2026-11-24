@@ -1,0 +1,18 @@
+{
+  "name": "lalbagh-glass-house-3d",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Immersive interactive 3D WebGL experience of the Lalbagh Glass House (Albert Victor Conservatory, 1889) in Bengaluru",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}
