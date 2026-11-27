@@ -1,13 +1,14 @@
 import * as THREE from 'three';
+import { CSM } from 'three/addons/csm/CSM.js';
 
 export const TIME_PRESETS = {
   morning: {
     label: 'Morning',
     sunAzimuth: 52,
     sunElevation: 28,
-    zenith: new THREE.Color('#2864a8'),
-    mid: new THREE.Color('#68a7db'),
-    horizon: new THREE.Color('#dce9f2'),
+    zenith: new THREE.Color('#225ba1'),
+    mid: new THREE.Color('#5ea0db'),
+    horizon: new THREE.Color('#dfebf4'),
     sunColor: new THREE.Color('#fff2d6'),
     sunIntensity: 2.35,
     hemiSky: new THREE.Color('#b6daf8'),
@@ -16,44 +17,46 @@ export const TIME_PRESETS = {
     fillColor: new THREE.Color('#b8d6f5'),
     fillIntensity: 0.45,
     fogColor: new THREE.Color('#cfe1ea'),
-    fogDensity: 0.0024,
+    fogDensity: 0.0022,
     cloudTint: new THREE.Color('#ffffff'),
-    cloudOpacity: 0.62,
+    cloudShadow: new THREE.Color('#a4bacf'),
+    cloudOpacity: 0.68,
     starIntensity: 0.0,
     nightGlow: 0.08,
     sunbeamOpacity: 0.24,
-    exposure: 1.06
+    exposure: 1.04
   },
   midday: {
     label: 'Midday',
     sunAzimuth: 18,
     sunElevation: 62,
-    zenith: new THREE.Color('#1d5da8'),
-    mid: new THREE.Color('#4f97db'),
-    horizon: new THREE.Color('#cde6f6'),
+    zenith: new THREE.Color('#1958a6'),
+    mid: new THREE.Color('#4c95dc'),
+    horizon: new THREE.Color('#cfe6f7'),
     sunColor: new THREE.Color('#fffcf2'),
-    sunIntensity: 2.8,
+    sunIntensity: 2.75,
     hemiSky: new THREE.Color('#cbe7ff'),
     hemiGround: new THREE.Color('#647949'),
-    hemiIntensity: 1.2,
+    hemiIntensity: 1.18,
     fillColor: new THREE.Color('#c7e1fa'),
-    fillIntensity: 0.52,
+    fillIntensity: 0.5,
     fogColor: new THREE.Color('#c8e1f0'),
-    fogDensity: 0.0019,
+    fogDensity: 0.0018,
     cloudTint: new THREE.Color('#ffffff'),
-    cloudOpacity: 0.52,
+    cloudShadow: new THREE.Color('#9db5cf'),
+    cloudOpacity: 0.56,
     starIntensity: 0.0,
     nightGlow: 0.0,
     sunbeamOpacity: 0.06,
-    exposure: 1.04
+    exposure: 1.02
   },
   golden: {
     label: 'Golden Hour',
     sunAzimuth: -64,
     sunElevation: 11,
-    zenith: new THREE.Color('#24396b'),
-    mid: new THREE.Color('#9e646d'),
-    horizon: new THREE.Color('#f6a662'),
+    zenith: new THREE.Color('#203566'),
+    mid: new THREE.Color('#9f626a'),
+    horizon: new THREE.Color('#f7a45d'),
     sunColor: new THREE.Color('#ffad5c'),
     sunIntensity: 2.45,
     hemiSky: new THREE.Color('#f4b487'),
@@ -62,13 +65,14 @@ export const TIME_PRESETS = {
     fillColor: new THREE.Color('#8096cc'),
     fillIntensity: 0.42,
     fogColor: new THREE.Color('#df9f74'),
-    fogDensity: 0.0029,
-    cloudTint: new THREE.Color('#ffd3a8'),
-    cloudOpacity: 0.68,
+    fogDensity: 0.0027,
+    cloudTint: new THREE.Color('#ffd6ad'),
+    cloudShadow: new THREE.Color('#7d5868'),
+    cloudOpacity: 0.72,
     starIntensity: 0.0,
-    nightGlow: 0.78,
+    nightGlow: 0.85,
     sunbeamOpacity: 0.34,
-    exposure: 1.08
+    exposure: 1.06
   },
   night: {
     label: 'Night',
@@ -85,13 +89,14 @@ export const TIME_PRESETS = {
     fillColor: new THREE.Color('#4a6999'),
     fillIntensity: 0.25,
     fogColor: new THREE.Color('#101d30'),
-    fogDensity: 0.0032,
-    cloudTint: new THREE.Color('#293f60'),
-    cloudOpacity: 0.35,
+    fogDensity: 0.003,
+    cloudTint: new THREE.Color('#2d4366'),
+    cloudShadow: new THREE.Color('#142038'),
+    cloudOpacity: 0.42,
     starIntensity: 1.0,
-    nightGlow: 1.85,
+    nightGlow: 1.95,
     sunbeamOpacity: 0.0,
-    exposure: 1.18
+    exposure: 1.14
   }
 };
 
@@ -122,8 +127,10 @@ const SKY_FRAG = /* glsl */ `
   uniform vec3 uSunDir;
   uniform vec3 uSunColor;
   uniform vec3 uCloudTint;
+  uniform vec3 uCloudShadow;
   uniform float uCloudOpacity;
   uniform float uStarIntensity;
+  uniform float uHdrBoost;
   uniform float uTime;
 
   varying vec3 vWorldPos;
@@ -147,9 +154,9 @@ const SKY_FRAG = /* glsl */ `
     float v = 0.0;
     float a = 0.5;
     mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
       v += a * noise(p);
-      p = rot * p * 2.05;
+      p = rot * p * 2.04;
       a *= 0.5;
     }
     return v;
@@ -157,24 +164,46 @@ const SKY_FRAG = /* glsl */ `
 
   void main() {
     vec3 dir = normalize(vWorldPos);
+    vec3 sunN = normalize(uSunDir);
     float h = clamp(dir.y, 0.0, 1.0);
 
-    vec3 col = mix(uHorizonColor, uMidColor, smoothstep(0.0, 0.28, h));
-    col = mix(col, uZenithColor, smoothstep(0.24, 0.92, h));
+    // Rayleigh atmospheric sky gradient + subtle horizon warm haze
+    vec3 col = mix(uHorizonColor, uMidColor, smoothstep(0.0, 0.25, h));
+    col = mix(col, uZenithColor, smoothstep(0.20, 0.92, h));
 
-    // Solar / Lunar glow & disc
-    float sunDot = max(dot(dir, normalize(uSunDir)), 0.0);
-    float halo = pow(sunDot, 12.0) * 0.42 + pow(sunDot, 120.0) * 0.65;
-    float disc = smoothstep(0.9993, 0.99975, sunDot);
-    col += uSunColor * (halo + disc * 1.6);
+    float sunDot = max(dot(dir, sunN), 0.0);
+    // Warm Mie horizon scatter around sun azimuth
+    float mieScatter = pow(sunDot, 5.0) * (1.0 - smoothstep(0.0, 0.55, h)) * 0.26;
+    col += uSunColor * mieScatter;
 
-    // Subtle animated wispy clouds above horizon
-    if (dir.y > 0.02) {
-      vec2 cloudUv = dir.xz / (dir.y + 0.18) * 1.15;
-      cloudUv += vec2(uTime * 0.008, uTime * 0.004);
-      float c = fbm(cloudUv);
-      float mask = smoothstep(0.47, 0.78, c) * smoothstep(0.02, 0.22, dir.y) * uCloudOpacity;
-      col = mix(col, uCloudTint, mask * 0.62);
+    // Solar / Lunar corona & HDR disc peak
+    float halo = pow(sunDot, 14.0) * 0.36 + pow(sunDot, 110.0) * 0.72;
+    float disc = smoothstep(0.9992, 0.99978, sunDot);
+    col += uSunColor * (halo + disc * 1.8 * uHdrBoost);
+
+    // Two-layer lit volumetric clouds (cumulus + high cirrus)
+    if (dir.y > 0.015) {
+      vec2 baseUv = dir.xz / (dir.y + 0.19);
+      vec2 wind1 = baseUv * 0.92 + vec2(uTime * 0.006, uTime * 0.003);
+      float c1 = fbm(wind1);
+
+      // Directional self-shadowing along sun vector
+      vec2 sunStep = sunN.xz / max(abs(sunN.y) + 0.35, 0.45) * 0.085;
+      float c1Lit = fbm(wind1 + sunStep);
+      float lightFactor = clamp(0.58 + (c1 - c1Lit) * 3.8 + pow(sunDot, 4.0) * 0.38, 0.0, 1.0);
+
+      float cumulusMask = smoothstep(0.47, 0.77, c1) * smoothstep(0.015, 0.22, dir.y) * uCloudOpacity;
+      vec3 cloudCol = mix(uCloudShadow, uCloudTint, lightFactor);
+      // Sunlit silver/gold lining near the solar cone
+      cloudCol += uSunColor * pow(sunDot, 16.0) * (1.0 - smoothstep(0.55, 0.85, c1)) * (0.45 + 0.15 * uHdrBoost);
+
+      // Subtle high-altitude wispy cirrus layer
+      vec2 wind2 = baseUv * 2.1 + vec2(uTime * 0.011, -uTime * 0.004);
+      float c2 = fbm(wind2 * vec2(1.4, 0.7));
+      float cirrusMask = smoothstep(0.58, 0.86, c2) * smoothstep(0.08, 0.35, dir.y) * uCloudOpacity * 0.28;
+
+      col = mix(col, uCloudTint, cirrusMask);
+      col = mix(col, cloudCol, cumulusMask * 0.78);
     }
 
     // Pin-sharp circular twinkling starfield at night
@@ -190,7 +219,7 @@ const SKY_FRAG = /* glsl */ `
         float point = smoothstep(starSize, 0.0, dist);
         float twinkle = 0.65 + 0.35 * sin(uTime * 2.2 + starRand * 90.0);
         float horizonFade = smoothstep(0.05, 0.36, dir.y);
-        col += vec3(0.92, 0.96, 1.0) * point * twinkle * uStarIntensity * horizonFade * 1.35;
+        col += vec3(0.92, 0.96, 1.0) * point * twinkle * uStarIntensity * horizonFade * 1.45;
       }
     }
 
@@ -213,7 +242,6 @@ const SUNBEAM_FRAG = /* glsl */ `
   varying vec2 vUv;
 
   void main() {
-    // Soft horizontal fade & top-to-bottom fade
     float edgeX = sin(vUv.x * 3.14159265);
     edgeX = pow(max(edgeX, 0.0), 1.65);
     float fadeY = smoothstep(0.0, 0.22, vUv.y) * (1.0 - smoothstep(0.55, 1.0, 1.0 - vUv.y));
@@ -223,16 +251,15 @@ const SUNBEAM_FRAG = /* glsl */ `
   }
 `;
 
-export function createSkyAndLighting(scene, renderer) {
+export function createSkyAndLighting(scene, renderer, camera) {
   const group = new THREE.Group();
   group.name = 'SkyAndLighting';
   scene.add(group);
 
-  // Fog
   const fog = new THREE.FogExp2(TIME_PRESETS.morning.fogColor.getHex(), TIME_PRESETS.morning.fogDensity);
   scene.fog = fog;
 
-  // Sky Dome
+  // Sky Dome (excluded from GTAO)
   const skyUniforms = {
     uZenithColor: { value: TIME_PRESETS.morning.zenith.clone() },
     uMidColor: { value: TIME_PRESETS.morning.mid.clone() },
@@ -240,8 +267,10 @@ export function createSkyAndLighting(scene, renderer) {
     uSunDir: { value: dirFromAngles(52, 28, 1).normalize() },
     uSunColor: { value: TIME_PRESETS.morning.sunColor.clone() },
     uCloudTint: { value: TIME_PRESETS.morning.cloudTint.clone() },
+    uCloudShadow: { value: TIME_PRESETS.morning.cloudShadow.clone() },
     uCloudOpacity: { value: TIME_PRESETS.morning.cloudOpacity },
     uStarIntensity: { value: 0 },
+    uHdrBoost: { value: 1.0 },
     uTime: { value: 0 }
   };
 
@@ -255,30 +284,39 @@ export function createSkyAndLighting(scene, renderer) {
   });
   const skyDome = new THREE.Mesh(skyGeo, skyMat);
   skyDome.renderOrder = -10;
+  skyDome.userData.noGTAO = true;
   group.add(skyDome);
 
-  // Main Shadow-Casting Sun / Moon Light
-  const sunLight = new THREE.DirectionalLight(0xfff2d6, 2.35);
-  sunLight.position.copy(dirFromAngles(52, 28, 72));
-  sunLight.castShadow = true;
-  sunLight.shadow.mapSize.set(2048, 2048);
-  sunLight.shadow.camera.near = 10;
-  sunLight.shadow.camera.far = 180;
-  sunLight.shadow.camera.left = -46;
-  sunLight.shadow.camera.right = 46;
-  sunLight.shadow.camera.top = 46;
-  sunLight.shadow.camera.bottom = -46;
-  sunLight.shadow.bias = -0.0004;
-  sunLight.shadow.normalBias = 0.035;
-  group.add(sunLight);
+  // Cascaded Shadow Maps (3 cascades for razor-sharp close filigree & wide park shadows)
+  const initialSunDir = dirFromAngles(52, 28, 1).normalize();
+  const csm = new CSM({
+    maxFar: 140,
+    cascades: 3,
+    mode: 'practical',
+    parent: group,
+    shadowMapSize: 2048,
+    lightDirection: initialSunDir.clone().negate(),
+    lightIntensity: TIME_PRESETS.morning.sunIntensity,
+    shadowBias: -0.00025,
+    lightNear: 1,
+    lightFar: 260,
+    lightMargin: 75,
+    camera
+  });
+  csm.fade = true;
+  for (const l of csm.lights) {
+    l.shadow.normalBias = 0.025;
+    l.color.copy(TIME_PRESETS.morning.sunColor);
+  }
 
   // Ambient & Bounce Hemisphere
   const hemiLight = new THREE.HemisphereLight(0xb6daf8, 0x5a6e45, 1.05);
   group.add(hemiLight);
 
-  // Counter-fill directional light for delicate ironwork definition
+  // Counter-fill directional light (never casts shadows)
   const fillLight = new THREE.DirectionalLight(0xb8d6f5, 0.45);
   fillLight.position.set(-50, 26, -42);
+  fillLight.castShadow = false;
   group.add(fillLight);
 
   // Interior & Night Illumination Rig
@@ -290,11 +328,11 @@ export function createSkyAndLighting(scene, renderer) {
 
   const chandelierLights = [];
   const chandelierPositions = [
-    [0, 10.6, 0, 2.2, 28],
-    [-12, 8.2, 0, 1.5, 22],
-    [12, 8.2, 0, 1.5, 22],
-    [0, 8.2, -11, 1.5, 22],
-    [0, 8.2, 11, 1.5, 22]
+    [0, 10.6, 0, 2.4, 28],
+    [-12, 8.2, 0, 1.6, 22],
+    [12, 8.2, 0, 1.6, 22],
+    [0, 8.2, -11, 1.6, 22],
+    [0, 8.2, 11, 1.6, 22]
   ];
   for (const [x, y, z, baseIntensity, dist] of chandelierPositions) {
     const pt = new THREE.PointLight(0xffcb82, baseIntensity * 0.1, dist, 1.45);
@@ -311,7 +349,7 @@ export function createSkyAndLighting(scene, renderer) {
   fountainLight.position.set(0, 1.8, 34);
   group.add(fountainLight);
 
-  // Volumetric Sunbeam Shafts streaming down from upper barrel vault
+  // Volumetric Sunbeam Shafts (excluded from GTAO)
   const sunbeamUniforms = {
     uColor: { value: new THREE.Color('#ffe8b6') },
     uOpacity: { value: TIME_PRESETS.morning.sunbeamOpacity },
@@ -328,27 +366,31 @@ export function createSkyAndLighting(scene, renderer) {
   });
 
   const sunbeamsGroup = new THREE.Group();
-  const beamGeo = new THREE.PlaneGeometry(4.4, 15.5);
+  sunbeamsGroup.userData.noGTAO = true;
+  const beamGeo = new THREE.PlaneGeometry(3.2, 9.6);
   const beamCoords = [
-    [-15, 8.6, 0.4, 0.34, 0.18],
-    [-7.5, 8.8, -0.3, 0.34, -0.14],
-    [7.5, 8.8, 0.2, 0.34, 0.16],
-    [15, 8.6, -0.4, 0.34, -0.18],
-    [-0.5, 8.8, -11.5, 0.32, 1.15],
-    [0.5, 8.8, 11.5, 0.32, -1.15],
-    [-2.0, 9.6, -1.6, 0.26, 0.48],
-    [2.0, 9.6, 1.6, 0.26, -0.48]
+    [-15, 6.2, 0.3, 0.28, 0.16],
+    [-7.5, 6.3, -0.2, 0.28, -0.14],
+    [7.5, 6.3, 0.2, 0.28, 0.16],
+    [15, 6.2, -0.3, 0.28, -0.16],
+    [-0.3, 6.3, -11.5, 0.26, 1.15],
+    [0.3, 6.3, 11.5, 0.26, -1.15],
+    [-1.4, 6.6, -1.2, 0.22, 0.48],
+    [1.4, 6.6, 1.2, 0.22, -0.48]
   ];
   for (const [bx, by, bz, tiltZ, rotY] of beamCoords) {
     const beam = new THREE.Mesh(beamGeo, sunbeamMat);
     beam.position.set(bx, by, bz);
     beam.rotation.set(0.18, rotY, tiltZ);
     beam.renderOrder = 3;
+    beam.userData.noGTAO = true;
     sunbeamsGroup.add(beam);
   }
   group.add(sunbeamsGroup);
 
-  // PMREM Environment Generator for realistic sky reflections on glass panes
+  // =========================================================================
+  // HDR BOTANICAL PARK REFLECTION ENVIRONMENT (PMREMGenerator)
+  // =========================================================================
   const pmremGenerator = new THREE.PMREMGenerator(renderer);
   pmremGenerator.compileEquirectangularShader();
   const envScene = new THREE.Scene();
@@ -360,15 +402,17 @@ export function createSkyAndLighting(scene, renderer) {
       uSunDir: { value: skyUniforms.uSunDir.value.clone() },
       uSunColor: { value: TIME_PRESETS.morning.sunColor.clone() },
       uCloudTint: { value: TIME_PRESETS.morning.cloudTint.clone() },
+      uCloudShadow: { value: TIME_PRESETS.morning.cloudShadow.clone() },
       uCloudOpacity: { value: TIME_PRESETS.morning.cloudOpacity },
       uStarIntensity: { value: 0 },
+      uHdrBoost: { value: 14.0 },
       uTime: { value: 0 }
     },
     vertexShader: SKY_VERT,
     fragmentShader: SKY_FRAG,
     side: THREE.BackSide
   });
-  const envSkyMesh = new THREE.Mesh(new THREE.SphereGeometry(60, 24, 16), envSkyMat);
+  const envSkyMesh = new THREE.Mesh(new THREE.SphereGeometry(60, 32, 20), envSkyMat);
   envScene.add(envSkyMesh);
 
   const envGroundMat = new THREE.MeshBasicMaterial({ color: 0x35532c });
@@ -376,6 +420,35 @@ export function createSkyAndLighting(scene, renderer) {
   envGround.rotation.x = -Math.PI * 0.5;
   envGround.position.y = -2;
   envScene.add(envGround);
+
+  // 360° Lalbagh treetop silhouette ring so glass vaults reflect real park foliage horizon
+  const envCanopyMats = [];
+  const envCanopyBaseColors = [0x214422, 0x2c5628, 0x36642e];
+  for (let i = 0; i < 3; i++) {
+    envCanopyMats.push(new THREE.MeshBasicMaterial({ color: envCanopyBaseColors[i] }));
+  }
+  const treeDomeGeo = new THREE.SphereGeometry(1, 10, 8);
+  for (let i = 0; i < 28; i++) {
+    const a = (i / 28) * Math.PI * 2;
+    const dist = 36 + (i % 3) * 4;
+    const rad = 5.5 + (i % 4) * 1.4;
+    const dome = new THREE.Mesh(treeDomeGeo, envCanopyMats[i % envCanopyMats.length]);
+    dome.position.set(Math.cos(a) * dist, 1.2 + (i % 2) * 0.8, Math.sin(a) * dist);
+    dome.scale.set(rad * 1.35, rad * 0.72, rad * 1.35);
+    envScene.add(dome);
+  }
+
+  // Warm lantern reflection points in the lower park env for Golden/Night glass glints
+  const envLanternMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.8, 1.8, 0.8) });
+  const envLanternGroup = new THREE.Group();
+  const lanternOrbGeo = new THREE.SphereGeometry(0.9, 8, 6);
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2 + 0.2;
+    const orb = new THREE.Mesh(lanternOrbGeo, envLanternMat);
+    orb.position.set(Math.cos(a) * 26, 1.5, Math.sin(a) * 26);
+    envLanternGroup.add(orb);
+  }
+  envScene.add(envLanternGroup);
 
   let currentEnvRT = null;
   function rebuildEnvMap(preset) {
@@ -385,9 +458,17 @@ export function createSkyAndLighting(scene, renderer) {
     envSkyMat.uniforms.uSunColor.value.copy(preset.sunColor);
     envSkyMat.uniforms.uSunDir.value.copy(dirFromAngles(preset.sunAzimuth, preset.sunElevation, 1).normalize());
     envSkyMat.uniforms.uCloudTint.value.copy(preset.cloudTint);
+    envSkyMat.uniforms.uCloudShadow.value.copy(preset.cloudShadow);
     envSkyMat.uniforms.uCloudOpacity.value = preset.cloudOpacity;
     envSkyMat.uniforms.uStarIntensity.value = preset.starIntensity;
+    envSkyMat.uniforms.uHdrBoost.value = preset.starIntensity > 0.5 ? 2.4 : 14.0;
     envGroundMat.color.copy(preset.hemiGround).multiplyScalar(0.75);
+
+    const canopyMul = preset.starIntensity > 0.5 ? 0.25 : preset.nightGlow > 0.5 ? 0.65 : 1.0;
+    for (let i = 0; i < envCanopyMats.length; i++) {
+      envCanopyMats[i].color.setHex(envCanopyBaseColors[i]).multiplyScalar(canopyMul);
+    }
+    envLanternGroup.visible = preset.nightGlow > 0.4;
 
     const nextRT = pmremGenerator.fromScene(envScene, 0.04);
     scene.environment = nextRT.texture;
@@ -407,6 +488,37 @@ export function createSkyAndLighting(scene, renderer) {
 
   rebuildEnvMap(targetPreset);
 
+  // Chain CSM shader setup onto every Standard/Physical material without overwriting wind sway
+  const csmPatchedMats = new WeakSet();
+  function setupSceneForCSM(targetScene) {
+    targetScene.traverse((obj) => {
+      if (!obj.isMesh || !obj.material) return;
+      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+      for (const mat of mats) {
+        if (!mat || csmPatchedMats.has(mat)) continue;
+        if (!(mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial)) continue;
+        csmPatchedMats.add(mat);
+
+        const prevCompile = typeof mat.onBeforeCompile === 'function' ? mat.onBeforeCompile : null;
+        const prevKey = typeof mat.customProgramCacheKey === 'function' ? mat.customProgramCacheKey() : '';
+
+        csm.setupMaterial(mat);
+        const csmCompile = mat.onBeforeCompile;
+
+        if (prevCompile) {
+          mat.onBeforeCompile = (shader, r) => {
+            csmCompile(shader, r);
+            prevCompile(shader, r);
+          };
+          mat.customProgramCacheKey = () => `${prevKey}_csm`;
+        } else {
+          mat.customProgramCacheKey = () => 'csm_std';
+        }
+        mat.needsUpdate = true;
+      }
+    });
+  }
+
   function setTimeOfDay(mode, immediate = false) {
     if (!TIME_PRESETS[mode]) return;
     activeMode = mode;
@@ -424,10 +536,13 @@ export function createSkyAndLighting(scene, renderer) {
       skyUniforms.uHorizonColor.value.copy(targetPreset.horizon);
       skyUniforms.uSunColor.value.copy(targetPreset.sunColor);
       skyUniforms.uCloudTint.value.copy(targetPreset.cloudTint);
+      skyUniforms.uCloudShadow.value.copy(targetPreset.cloudShadow);
       skyUniforms.uCloudOpacity.value = targetPreset.cloudOpacity;
       skyUniforms.uStarIntensity.value = targetPreset.starIntensity;
-      sunLight.color.copy(targetPreset.sunColor);
-      sunLight.intensity = targetPreset.sunIntensity;
+      for (const l of csm.lights) {
+        l.color.copy(targetPreset.sunColor);
+        l.intensity = targetPreset.sunIntensity;
+      }
       hemiLight.color.copy(targetPreset.hemiSky);
       hemiLight.groundColor.copy(targetPreset.hemiGround);
       hemiLight.intensity = targetPreset.hemiIntensity;
@@ -439,6 +554,7 @@ export function createSkyAndLighting(scene, renderer) {
     }
   }
 
+  const tmpSunDir = new THREE.Vector3();
   function update(dt, elapsed, lightingTargets = null) {
     skyUniforms.uTime.value = elapsed;
     sunbeamUniforms.uTime.value = elapsed;
@@ -450,21 +566,26 @@ export function createSkyAndLighting(scene, renderer) {
     currentState.sunbeamOpacity += (targetPreset.sunbeamOpacity - currentState.sunbeamOpacity) * k;
     currentState.exposure += (targetPreset.exposure - currentState.exposure) * k;
 
-    const sunPos = dirFromAngles(currentState.azimuth, currentState.elevation, 76);
-    sunLight.position.copy(sunPos);
-    skyUniforms.uSunDir.value.copy(sunPos).normalize();
-    fillLight.position.set(-sunPos.x * 0.65, Math.max(18, sunPos.y * 0.7), -sunPos.z * 0.65);
+    tmpSunDir.copy(dirFromAngles(currentState.azimuth, currentState.elevation, 1)).normalize();
+    csm.lightDirection.copy(tmpSunDir).negate();
+    skyUniforms.uSunDir.value.copy(tmpSunDir);
+    fillLight.position.set(-tmpSunDir.x * 52, Math.max(18, tmpSunDir.y * 55), -tmpSunDir.z * 52);
 
     skyUniforms.uZenithColor.value.lerp(targetPreset.zenith, k);
     skyUniforms.uMidColor.value.lerp(targetPreset.mid, k);
     skyUniforms.uHorizonColor.value.lerp(targetPreset.horizon, k);
     skyUniforms.uSunColor.value.lerp(targetPreset.sunColor, k);
     skyUniforms.uCloudTint.value.lerp(targetPreset.cloudTint, k);
+    skyUniforms.uCloudShadow.value.lerp(targetPreset.cloudShadow, k);
     skyUniforms.uCloudOpacity.value += (targetPreset.cloudOpacity - skyUniforms.uCloudOpacity.value) * k;
     skyUniforms.uStarIntensity.value += (targetPreset.starIntensity - skyUniforms.uStarIntensity.value) * k;
 
-    sunLight.color.lerp(targetPreset.sunColor, k);
-    sunLight.intensity += (targetPreset.sunIntensity - sunLight.intensity) * k;
+    for (const l of csm.lights) {
+      l.color.lerp(targetPreset.sunColor, k);
+      l.intensity += (targetPreset.sunIntensity - l.intensity) * k;
+    }
+    csm.update();
+
     hemiLight.color.lerp(targetPreset.hemiSky, k);
     hemiLight.groundColor.lerp(targetPreset.hemiGround, k);
     hemiLight.intensity += (targetPreset.hemiIntensity - hemiLight.intensity) * k;
@@ -475,12 +596,10 @@ export function createSkyAndLighting(scene, renderer) {
     fog.density += (targetPreset.fogDensity - fog.density) * k;
     renderer.toneMappingExposure = currentState.exposure;
 
-    // Sunbeams
     sunbeamsGroup.visible = currentState.sunbeamOpacity > 0.015;
     sunbeamUniforms.uOpacity.value = currentState.sunbeamOpacity;
     sunbeamUniforms.uColor.value.lerp(targetPreset.sunColor, k);
 
-    // Chandeliers, Spotlights & Lantern Emissives
     const glow = currentState.nightGlow;
     floralSpot.intensity = 1.2 + glow * 4.5;
     for (const item of chandelierLights) {
@@ -499,16 +618,24 @@ export function createSkyAndLighting(scene, renderer) {
     }
   }
 
+  function onResize() {
+    csm.updateFrustums();
+  }
+
   function getTimeOfDay() {
     return activeMode;
   }
 
   return {
     group,
+    setupSceneForCSM,
+    onResize,
     setTimeOfDay,
     getTimeOfDay,
     update,
     dispose() {
+      csm.remove();
+      csm.dispose();
       if (currentEnvRT) currentEnvRT.dispose();
       pmremGenerator.dispose();
     }

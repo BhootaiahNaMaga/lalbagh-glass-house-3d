@@ -6,6 +6,7 @@ import { createHotspotsController } from './hotspots.js';
 import { buildInteriorDisplays } from './interiorDisplays.js';
 import { buildLalbaghFauna } from './lalbaghFauna.js';
 import { buildLalbaghGardens } from './lalbaghGardens.js';
+import { createPostProcessing } from './postProcessing.js';
 import { createSkyAndLighting } from './skyAndLighting.js';
 
 const TIME_ORDER = ['morning', 'midday', 'golden', 'night'];
@@ -18,6 +19,7 @@ const loadingProgress = document.getElementById('loading-progress');
 const hudRoot = document.getElementById('hud-root');
 const btnShowHud = document.getElementById('btn-show-hud');
 const btnHideHud = document.getElementById('btn-hide-hud');
+const btnQuality = document.getElementById('btn-quality');
 const btnHotspots = document.getElementById('btn-hotspots');
 const btnAudio = document.getElementById('btn-audio');
 const walkHintBadge = document.getElementById('walk-hint-badge');
@@ -61,7 +63,7 @@ const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerH
 loadingProgress.style.width = '45%';
 
 // --- 2. Build Modules ---
-const skyAndLighting = createSkyAndLighting(scene, renderer);
+const skyAndLighting = createSkyAndLighting(scene, renderer, camera);
 loadingProgress.style.width = '65%';
 
 const glassHouse = buildLalbaghGlassHouse(maxAnisotropy);
@@ -76,6 +78,11 @@ scene.add(gardens.group);
 
 const fauna = buildLalbaghFauna(maxAnisotropy);
 scene.add(fauna.group);
+
+// Apply 3-cascade CSM across all opaque & foliage materials
+skyAndLighting.setupSceneForCSM(scene);
+
+const postProcessing = createPostProcessing(renderer, scene, camera);
 loadingProgress.style.width = '95%';
 
 const audioAmbience = new GardenAudioAmbience();
@@ -128,8 +135,16 @@ const hotspotsController = createHotspotsController(hotspotsLayer, camera, (hs) 
 // --- 4. UI Actions ---
 function setTimeOfDay(mode) {
   skyAndLighting.setTimeOfDay(mode);
+  postProcessing.setTimeMode(mode);
   audioAmbience.setTimeMode(mode);
   timeButtons.forEach((b) => b.classList.toggle('active', b.dataset.time === mode));
+}
+
+function setQuality(nextQuality) {
+  postProcessing.setQuality(nextQuality);
+  const isCinematic = postProcessing.getQuality() === 'cinematic';
+  btnQuality.classList.toggle('active', isCinematic);
+  btnQuality.querySelector('span:last-child').textContent = isCinematic ? 'Cinematic' : 'Standard';
 }
 
 function setDisplayMode(mode) {
@@ -155,6 +170,11 @@ displayButtons.forEach((btn) =>
 viewButtons.forEach((btn) =>
   btn.addEventListener('click', () => cameraController.setViewpoint(btn.dataset.view))
 );
+
+btnQuality.addEventListener('click', () => {
+  const next = postProcessing.getQuality() === 'cinematic' ? 'standard' : 'cinematic';
+  setQuality(next);
+});
 
 btnHotspots.addEventListener('click', () => {
   const next = !hotspotsController.isVisible();
@@ -205,6 +225,10 @@ window.addEventListener('keydown', (e) => {
       btnHotspots.click();
       break;
     }
+    case 'q': {
+      btnQuality.click();
+      break;
+    }
     case 'h': {
       setHudVisible(hudRoot.classList.contains('hidden'));
       break;
@@ -230,6 +254,8 @@ window.addEventListener('resize', () => {
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
+  skyAndLighting.onResize();
+  postProcessing.setSize(w, h);
 });
 
 // Expose verification & automation handle
@@ -241,6 +267,7 @@ window.__lalbaghApp = {
   },
   setDisplayMode,
   setCameraMode: (mode) => cameraController.setMode(mode),
+  setQuality,
   openHotspot: (id) => hotspotsController.selectById(id),
   closeHotspot: closeHeritageCard,
   setHotspotsVisible: (v) => {
@@ -253,6 +280,7 @@ window.__lalbaghApp = {
     viewpoint: cameraController.getViewpoint(),
     timeOfDay: skyAndLighting.getTimeOfDay(),
     displayMode: interiorDisplays.getDisplayMode(),
+    quality: postProcessing.getQuality(),
     cameraPos: camera.position.toArray(),
     bloomCount: interiorDisplays.bloomCount,
     faunaSummary: fauna.faunaSummary
@@ -278,7 +306,7 @@ function animate() {
   fauna.update(dt, elapsed);
   audioAmbience.update(dt, camera.position);
 
-  renderer.render(scene, camera);
+  postProcessing.render(dt);
   hotspotsController.update(window.innerWidth, window.innerHeight);
 
   if (!firstFrameRendered) {

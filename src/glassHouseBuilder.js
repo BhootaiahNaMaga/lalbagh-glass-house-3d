@@ -112,11 +112,11 @@ export function buildLalbaghGlassHouse(maxAnisotropy = 8) {
     color: 0xd8eff8,
     transparent: true,
     opacity: 0.27,
-    roughness: 0.08,
+    roughness: 0.055,
     metalness: 0.12,
     clearcoat: 1.0,
-    clearcoatRoughness: 0.05,
-    envMapIntensity: 1.65,
+    clearcoatRoughness: 0.03,
+    envMapIntensity: 2.0,
     side: THREE.DoubleSide,
     depthWrite: false
   });
@@ -125,11 +125,11 @@ export function buildLalbaghGlassHouse(maxAnisotropy = 8) {
     color: 0xd0ebf7,
     transparent: true,
     opacity: 0.34,
-    roughness: 0.07,
+    roughness: 0.05,
     metalness: 0.14,
     clearcoat: 1.0,
-    clearcoatRoughness: 0.05,
-    envMapIntensity: 1.75,
+    clearcoatRoughness: 0.03,
+    envMapIntensity: 1.85,
     side: THREE.DoubleSide,
     depthWrite: false
   });
@@ -231,8 +231,9 @@ export function buildLalbaghGlassHouse(maxAnisotropy = 8) {
       roughnessMap: texRough,
       bumpMap: texBump,
       bumpScale: 0.012,
-      roughness: 0.42,
-      metalness: 0.05
+      roughness: 0.34,
+      metalness: 0.06,
+      envMapIntensity: 0.95
     });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
     mesh.rotation.x = -Math.PI * 0.5;
